@@ -6,7 +6,8 @@ uniform vec2 iResolution;
 
 float iScale = 0.; //TODO: uniform this
 
-const vec3 c = vec3(1.,0.,-1.);
+const vec3 c = vec3(1.,0.,-1.), 
+    tc = vec3(234.,82.,35.)/255.;
 const float pi = acos(-1.);
 
 const float t_logo = 30.;
@@ -92,14 +93,14 @@ float circleseg(vec2 x, float r, float w, float p1, float p2)
 float line(vec2 x, vec2 p1, vec2 p2, float w)
 {
     vec2 d = p2-p1;
-    return w-length(x-mix(p1,p2,clamp(dot(x-p1,d)/dot(d,d),0.,1.)));
+    return length(x-mix(p1,p2,clamp(dot(x-p1,d)/dot(d,d),0.,1.)))-w;
 }
 
 float pict210(vec3 x, float h, float r, float w)
 {
     float ret = min(
         zextrude(x.z,circle(x.xy-r*c.xy,r,w),h),
-        zextrude(x.z, line(x.xy,-r*c.yx,r*c.yx,w), h)
+        zextrude(x.z, -line(x.xy,-r*c.yx,r*c.yx,w), h)
     );
     return min(ret,
         zextrude(x.z,circleseg(x.xy+r*c.xy,r,w,-pi/2.,pi/2.),h)
@@ -219,29 +220,51 @@ vec3 background(vec2 uv)
     return c.yyy;
 }
 
-vec2 textbox(vec2 x, vec2 p0, vec2 p1, float w)
+vec4 add2(vec4 sdf, vec4 sda)
+{
+    return vec4(
+        min(sdf.x, sda.x), 
+        mix(sda.gba, sdf.gba, smoothstep(-1.5/iResolution.y, 1.5/iResolution.y, sda.x))
+    );
+}
+
+float blend(float tin, float tout)
+{
+    return smoothstep(tin-.5, tin+.5, t)*(1.-smoothstep(tout-.5, tout+.5, t));
+}
+
+vec4 textbox(vec2 x, vec2 p0, vec2 p1, float w)
 {
     float dw = .004;
-    vec2 sda = vec2(2.*dw-length(x-p0), 1.),
-        sdf = vec2(line(x,p0,p1,dw), 1.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
-    sda = vec2(-abs(sda.x+2.*dw)+dw, 2.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
-    sda = vec2(2.*dw - length(x-p1), 1.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
-    sda  = vec2(-abs(sda.x+2.*dw)+dw, 2.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
-    sda = vec2(line(x, p1, p1+w*c.xy, 10.*dw), 3.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
-    sda = vec2(-abs(sda.x+2.*dw)+dw, 2.);
-    sdf = mix(sdf, sda, step( sdf.x,0.));
+
+    vec4 sdf = c.xyyy, sda; 
+
+    // Text background
+    sda = vec4(line(x, p1, p1+w*c.xy, 10.*dw), c.xyy);
+    sdf = add2(sdf, sda);
+    sdf = add2(sdf, vec4(abs(sda.x-2.*dw) - dw, c.xxy));
+
+    // Connection line and dots
+    // dot at p1
+    sda = vec4(length(x-p1)-2.*dw, tc);
+    sdf = add2(sdf, sda);
+    sdf = add2(sdf, vec4(abs(sda.x-2.*dw) - dw, c.xxy));
+
+    // dot at p0
+    sda = vec4(length(x-p0)-2.*dw, tc);
+    sdf = add2(sdf, sda);
+    sdf = add2(sdf, vec4(abs(sda.x-2.*dw) - dw, c.xxy));
     
+    //line
+    sdf = add2(sdf, vec4(line(x,p0,p1,dw), tc));
+
     return sdf;
 }
 
-vec3 textlayer(vec2 x)
+vec4 textlayer(vec2 x)
 {
-    vec2 sdt = textbox(x, vec2(.44,.155), vec2(.6,.4), .5), sda;
+    float alpha = 0.;
+    vec4 sdt =c.xyyy, sda;
     float d = 10.;
     vec2 uv = x;
     {
@@ -250,85 +273,70 @@ quad[48] = vec2[48](vec2(7.17e-01,3.88e-01),vec2(7.17e-01,4.02e-01),vec2(7.04e-0
 for(int i=0; i<13;++i) d=min(d,dsg(lin[2*i], lin[2*i+1], uv));
 for(int i=0; i<16; ++i) d=min(d,dsp(quad[3*i], quad[3*i+1], quad[3*i+2], uv));
     }
-    sda = vec2(.004-d, 2.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sda = vec2(-abs(sda.x)+.002, 4.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    vec3 sdf = vec3(//Team210
-        sdt,
-        smoothstep(10.,11., t)*(1.-smoothstep(25.,26.,t))
-    );
+    sda = textbox(x, vec2(.44,.155), vec2(.6,.4), .5);
+    vec4 sdb = vec4(d-.004, tc);
+    sda = add2(sda, sdb); 
+    sda = add2(sda, vec4(abs(sdb.x)-.002, c.xxy));
+    sdt = add2(sdt, sda);
+    alpha = max(alpha, step(sda.x, 1.5/iResolution.y)*blend(11., 25.));
+    
     d = 10.;
-    sdt = textbox(x, vec2(.485, .1), vec2(.6, .2), .5);
     {
 const vec2 lin[48] = vec2[48](vec2(6.50e-01,1.88e-01),vec2(6.50e-01,2.15e-01),vec2(6.77e-01,1.88e-01),vec2(6.77e-01,2.15e-01),vec2(6.91e-01,1.75e-01),vec2(6.91e-01,2.28e-01),vec2(7.44e-01,1.75e-01),vec2(7.44e-01,2.28e-01),vec2(6.91e-01,2.28e-01),vec2(7.17e-01,2.02e-01),vec2(7.17e-01,2.02e-01),vec2(7.44e-01,2.28e-01),vec2(7.58e-01,1.88e-01),vec2(7.58e-01,1.88e-01),vec2(7.58e-01,2.15e-01),vec2(7.58e-01,2.15e-01),vec2(7.99e-01,1.75e-01),vec2(7.85e-01,1.75e-01),vec2(7.99e-01,2.28e-01),vec2(7.85e-01,2.28e-01),vec2(7.72e-01,1.88e-01),vec2(7.72e-01,2.15e-01),vec2(8.67e-01,2.02e-01),vec2(8.80e-01,2.02e-01),vec2(8.67e-01,1.75e-01),vec2(8.80e-01,1.75e-01),vec2(8.80e-01,1.75e-01),vec2(8.80e-01,2.28e-01),vec2(9.07e-01,1.75e-01),vec2(9.21e-01,1.75e-01),vec2(8.94e-01,1.88e-01),vec2(9.21e-01,1.88e-01),vec2(9.35e-01,1.75e-01),vec2(9.61e-01,2.28e-01),vec2(9.75e-01,1.75e-01),vec2(9.89e-01,1.75e-01),vec2(1.00e+00,2.28e-01),vec2(9.89e-01,2.28e-01),vec2(1.02e+00,1.75e-01),vec2(1.02e+00,2.28e-01),vec2(1.02e+00,2.28e-01),vec2(1.04e+00,2.28e-01),vec2(1.02e+00,2.02e-01),vec2(1.04e+00,2.02e-01),vec2(1.06e+00,1.75e-01),vec2(1.08e+00,2.28e-01),vec2(1.06e+00,2.28e-01),vec2(1.08e+00,1.75e-01)),
 quad[60] = vec2[60](vec2(6.50e-01,1.88e-01),vec2(6.50e-01,1.75e-01),vec2(6.63e-01,1.75e-01),vec2(6.63e-01,1.75e-01),vec2(6.77e-01,1.75e-01),vec2(6.77e-01,1.88e-01),vec2(6.77e-01,2.15e-01),vec2(6.77e-01,2.28e-01),vec2(6.63e-01,2.28e-01),vec2(6.63e-01,2.28e-01),vec2(6.50e-01,2.28e-01),vec2(6.50e-01,2.15e-01),vec2(6.63e-01,1.88e-01),vec2(6.63e-01,1.75e-01),vec2(6.77e-01,1.75e-01),vec2(7.85e-01,1.75e-01),vec2(7.72e-01,1.75e-01),vec2(7.72e-01,1.88e-01),vec2(7.72e-01,2.15e-01),vec2(7.72e-01,2.28e-01),vec2(7.85e-01,2.28e-01),vec2(8.26e-01,1.75e-01),vec2(8.13e-01,1.75e-01),vec2(8.13e-01,1.88e-01),vec2(8.13e-01,1.88e-01),vec2(8.13e-01,2.02e-01),vec2(8.26e-01,2.02e-01),vec2(8.26e-01,2.02e-01),vec2(8.39e-01,2.02e-01),vec2(8.39e-01,1.88e-01),vec2(8.39e-01,1.88e-01),vec2(8.39e-01,1.75e-01),vec2(8.26e-01,1.75e-01),vec2(8.67e-01,1.75e-01),vec2(8.53e-01,1.75e-01),vec2(8.53e-01,1.88e-01),vec2(8.53e-01,1.88e-01),vec2(8.53e-01,2.02e-01),vec2(8.67e-01,2.02e-01),vec2(9.21e-01,1.88e-01),vec2(9.21e-01,2.02e-01),vec2(9.07e-01,2.02e-01),vec2(9.07e-01,2.02e-01),vec2(8.94e-01,2.02e-01),vec2(8.94e-01,1.88e-01),vec2(8.94e-01,1.88e-01),vec2(8.94e-01,1.75e-01),vec2(9.07e-01,1.75e-01),vec2(9.89e-01,1.75e-01),vec2(1.00e+00,1.75e-01),vec2(1.00e+00,1.88e-01),vec2(1.00e+00,1.88e-01),vec2(1.00e+00,2.02e-01),vec2(9.89e-01,2.02e-01),vec2(9.89e-01,2.02e-01),vec2(9.75e-01,2.02e-01),vec2(9.75e-01,2.15e-01),vec2(9.75e-01,2.15e-01),vec2(9.75e-01,2.28e-01),vec2(9.89e-01,2.28e-01));
 for(int i=0; i<24;++i) d=min(d,dsg(lin[2*i], lin[2*i+1], uv));
 for(int i=0; i<20; ++i) d=min(d,dsp(quad[3*i], quad[3*i+1], quad[3*i+2], uv));
     }
-    sda = vec2(.004-d, 2.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sda = vec2(-abs(sda.x)+.002, 4.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
+    sda = textbox(x, vec2(.485, .1), vec2(.6, .2), .5);
+    sdb = vec4(d-.004, tc);
+    sda = add2(sda, sdb); 
+    sda = add2(sda, vec4(abs(sdb.x)-.002, c.xxy));
+    sdt = add2(sdt, sda);
+    alpha = max(alpha, step(sda.x, 1.5/iResolution.y)*blend(12., 25.));
     
-    vec3 sdb = vec3(//QM :: Code/SFX
-        sdt,
-        smoothstep(12.,13., t)*(1.-smoothstep(25.,26.,t))
-    );
-    sdf = mix(sdf, sdb, step(sdf.x, 0.));
     d = 10.;
-    sdt = textbox(x, vec2(.485, .03), vec2(.6,.0), .5);
     {
 const vec2 lin[60] = vec2[60](vec2(6.50e-01,-2.50e-02),vec2(6.50e-01,2.83e-02),vec2(6.50e-01,2.83e-02),vec2(6.77e-01,-2.50e-02),vec2(6.77e-01,-2.50e-02),vec2(6.77e-01,2.83e-02),vec2(6.91e-01,-2.50e-02),vec2(6.91e-01,2.83e-02),vec2(6.91e-01,2.83e-02),vec2(7.04e-01,2.83e-02),vec2(6.91e-01,1.67e-03),vec2(7.04e-01,1.67e-03),vec2(7.17e-01,-1.17e-02),vec2(7.17e-01,-2.50e-02),vec2(7.58e-01,2.83e-02),vec2(7.31e-01,-1.17e-02),vec2(7.31e-01,-1.17e-02),vec2(7.58e-01,-1.17e-02),vec2(7.58e-01,1.67e-03),vec2(7.58e-01,-2.50e-02),vec2(7.72e-01,-1.17e-02),vec2(7.72e-01,-1.17e-02),vec2(7.72e-01,1.50e-02),vec2(7.72e-01,1.50e-02),vec2(8.13e-01,-2.50e-02),vec2(7.99e-01,-2.50e-02),vec2(8.13e-01,2.83e-02),vec2(7.99e-01,2.83e-02),vec2(7.86e-01,-1.17e-02),vec2(7.86e-01,1.50e-02),vec2(8.81e-01,1.67e-03),vec2(8.94e-01,1.67e-03),vec2(8.81e-01,-2.50e-02),vec2(8.94e-01,-2.50e-02),vec2(8.94e-01,-2.50e-02),vec2(8.94e-01,2.83e-02),vec2(9.21e-01,-2.50e-02),vec2(9.35e-01,-2.50e-02),vec2(9.08e-01,-1.17e-02),vec2(9.35e-01,-1.17e-02),vec2(9.49e-01,-2.50e-02),vec2(9.75e-01,2.83e-02),vec2(1.00e+00,1.67e-03),vec2(1.02e+00,1.67e-03),vec2(1.02e+00,1.67e-03),vec2(1.02e+00,-1.17e-02),vec2(9.89e-01,-1.17e-02),vec2(9.89e-01,1.50e-02),vec2(1.00e+00,2.83e-02),vec2(1.02e+00,2.83e-02),vec2(1.03e+00,-2.50e-02),vec2(1.03e+00,2.83e-02),vec2(1.03e+00,2.83e-02),vec2(1.06e+00,2.83e-02),vec2(1.03e+00,1.67e-03),vec2(1.06e+00,1.67e-03),vec2(1.07e+00,-2.50e-02),vec2(1.10e+00,2.83e-02),vec2(1.07e+00,2.83e-02),vec2(1.10e+00,-2.50e-02)),
 quad[51] = vec2[51](vec2(7.04e-01,2.83e-02),vec2(7.17e-01,2.83e-02),vec2(7.17e-01,1.50e-02),vec2(7.17e-01,1.50e-02),vec2(7.17e-01,1.67e-03),vec2(7.04e-01,1.67e-03),vec2(7.04e-01,1.67e-03),vec2(7.17e-01,1.67e-03),vec2(7.17e-01,-1.17e-02),vec2(7.99e-01,-2.50e-02),vec2(7.86e-01,-2.50e-02),vec2(7.86e-01,-1.17e-02),vec2(7.86e-01,1.50e-02),vec2(7.86e-01,2.83e-02),vec2(7.99e-01,2.83e-02),vec2(8.40e-01,-2.50e-02),vec2(8.27e-01,-2.50e-02),vec2(8.27e-01,-1.17e-02),vec2(8.27e-01,-1.17e-02),vec2(8.27e-01,1.67e-03),vec2(8.40e-01,1.67e-03),vec2(8.40e-01,1.67e-03),vec2(8.53e-01,1.67e-03),vec2(8.53e-01,-1.17e-02),vec2(8.53e-01,-1.17e-02),vec2(8.53e-01,-2.50e-02),vec2(8.40e-01,-2.50e-02),vec2(8.81e-01,-2.50e-02),vec2(8.67e-01,-2.50e-02),vec2(8.67e-01,-1.17e-02),vec2(8.67e-01,-1.17e-02),vec2(8.67e-01,1.67e-03),vec2(8.81e-01,1.67e-03),vec2(9.35e-01,-1.17e-02),vec2(9.35e-01,1.67e-03),vec2(9.21e-01,1.67e-03),vec2(9.21e-01,1.67e-03),vec2(9.08e-01,1.67e-03),vec2(9.08e-01,-1.17e-02),vec2(9.08e-01,-1.17e-02),vec2(9.08e-01,-2.50e-02),vec2(9.21e-01,-2.50e-02),vec2(9.89e-01,1.50e-02),vec2(9.89e-01,2.83e-02),vec2(1.00e+00,2.83e-02),vec2(1.00e+00,-2.50e-02),vec2(9.89e-01,-2.50e-02),vec2(9.89e-01,-1.17e-02),vec2(1.00e+00,-2.50e-02),vec2(1.02e+00,-2.50e-02),vec2(1.02e+00,-1.17e-02));
 for(int i=0; i<30;++i) d=min(d,dsg(lin[2*i], lin[2*i+1], uv));
 for(int i=0; i<17; ++i) d=min(d,dsp(quad[3*i], quad[3*i+1], quad[3*i+2], uv));
     }
-    sda = vec2(.004-d, 2.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sda = vec2(-abs(sda.x)+.002, 4.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sdb = vec3(//NR4 :: CODE/GFX
-        sdt,
-        smoothstep(14.,15., t)*(1.-smoothstep(25.,26.,t))
-    );
-    sdf = mix(sdf, sdb, step(sdf.x, 0.));
+    sda = textbox(x, vec2(.485, .03), vec2(.6,.0), .5);
+    sdb = vec4(d-.004, tc);
+    sda = add2(sda, sdb); 
+    sda = add2(sda, vec4(abs(sdb.x)-.002, c.xxy));
+    sdt = add2(sdt, sda);
+    alpha = max(alpha, step(sda.x, 1.5/iResolution.y)*blend(13., 25.));
+    
     d = 10.;
-    sdt = textbox(x, vec2(.435, -.02), vec2(.6,-.2), .5);
     {
 const vec2 lin[50] = vec2[50](vec2(6.50e-01,-2.25e-01),vec2(6.50e-01,-1.72e-01),vec2(7.03e-01,-2.25e-01),vec2(7.03e-01,-1.72e-01),vec2(6.50e-01,-1.72e-01),vec2(6.77e-01,-1.98e-01),vec2(6.77e-01,-1.98e-01),vec2(7.03e-01,-1.72e-01),vec2(7.31e-01,-2.25e-01),vec2(7.31e-01,-1.72e-01),vec2(7.17e-01,-2.25e-01),vec2(7.44e-01,-2.25e-01),vec2(7.17e-01,-1.72e-01),vec2(7.44e-01,-1.72e-01),vec2(7.85e-01,-2.25e-01),vec2(7.71e-01,-2.25e-01),vec2(7.85e-01,-1.72e-01),vec2(7.71e-01,-1.72e-01),vec2(7.58e-01,-2.12e-01),vec2(7.58e-01,-1.85e-01),vec2(7.99e-01,-2.12e-01),vec2(7.99e-01,-2.12e-01),vec2(7.99e-01,-1.85e-01),vec2(7.99e-01,-1.85e-01),vec2(8.13e-01,-2.25e-01),vec2(8.26e-01,-2.25e-01),vec2(8.39e-01,-1.72e-01),vec2(8.26e-01,-1.72e-01),vec2(8.53e-01,-1.98e-01),vec2(8.53e-01,-2.12e-01),vec2(8.80e-01,-1.98e-01),vec2(8.80e-01,-2.25e-01),vec2(8.94e-01,-2.52e-01),vec2(8.94e-01,-1.98e-01),vec2(8.94e-01,-1.98e-01),vec2(9.07e-01,-1.98e-01),vec2(8.94e-01,-2.25e-01),vec2(9.07e-01,-2.25e-01),vec2(9.35e-01,-2.52e-01),vec2(9.35e-01,-1.98e-01),vec2(9.35e-01,-1.98e-01),vec2(9.48e-01,-1.98e-01),vec2(9.35e-01,-2.25e-01),vec2(9.48e-01,-2.25e-01),vec2(1.02e+00,-2.25e-01),vec2(1.02e+00,-1.98e-01),vec2(1.06e+00,-2.12e-01),vec2(1.06e+00,-1.72e-01),vec2(1.04e+00,-1.98e-01),vec2(1.07e+00,-1.98e-01)),
 quad[54] = vec2[54](vec2(7.71e-01,-2.25e-01),vec2(7.58e-01,-2.25e-01),vec2(7.58e-01,-2.12e-01),vec2(7.58e-01,-1.85e-01),vec2(7.58e-01,-1.72e-01),vec2(7.71e-01,-1.72e-01),vec2(8.26e-01,-2.25e-01),vec2(8.39e-01,-2.25e-01),vec2(8.39e-01,-2.12e-01),vec2(8.39e-01,-2.12e-01),vec2(8.39e-01,-1.98e-01),vec2(8.26e-01,-1.98e-01),vec2(8.26e-01,-1.98e-01),vec2(8.13e-01,-1.98e-01),vec2(8.13e-01,-1.85e-01),vec2(8.13e-01,-1.85e-01),vec2(8.13e-01,-1.72e-01),vec2(8.26e-01,-1.72e-01),vec2(8.53e-01,-2.12e-01),vec2(8.53e-01,-2.25e-01),vec2(8.67e-01,-2.25e-01),vec2(8.67e-01,-2.25e-01),vec2(8.80e-01,-2.25e-01),vec2(8.80e-01,-2.12e-01),vec2(9.07e-01,-2.25e-01),vec2(9.21e-01,-2.25e-01),vec2(9.21e-01,-2.12e-01),vec2(9.21e-01,-2.12e-01),vec2(9.21e-01,-1.98e-01),vec2(9.07e-01,-1.98e-01),vec2(9.48e-01,-2.25e-01),vec2(9.61e-01,-2.25e-01),vec2(9.61e-01,-2.12e-01),vec2(9.61e-01,-2.12e-01),vec2(9.61e-01,-1.98e-01),vec2(9.48e-01,-1.98e-01),vec2(9.89e-01,-2.25e-01),vec2(9.75e-01,-2.25e-01),vec2(9.75e-01,-2.12e-01),vec2(9.75e-01,-2.12e-01),vec2(9.75e-01,-1.98e-01),vec2(9.89e-01,-1.98e-01),vec2(9.89e-01,-1.98e-01),vec2(1.00e+00,-1.98e-01),vec2(1.00e+00,-2.12e-01),vec2(1.00e+00,-2.12e-01),vec2(1.00e+00,-2.25e-01),vec2(9.89e-01,-2.25e-01),vec2(1.02e+00,-2.12e-01),vec2(1.02e+00,-1.98e-01),vec2(1.03e+00,-1.98e-01),vec2(1.06e+00,-2.12e-01),vec2(1.06e+00,-2.25e-01),vec2(1.07e+00,-2.25e-01));
 for(int i=0; i<25;++i) d=min(d,dsg(lin[2*i], lin[2*i+1], uv));
 for(int i=0; i<18; ++i) d=min(d,dsp(quad[3*i], quad[3*i+1], quad[3*i+2], uv));
     }
-    sda = vec2(.004-d, 2.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sda = vec2(-abs(sda.x)+.002, 4.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sdb = vec3(//MIC :: Support
-        sdt,
-        smoothstep(16.,17., t)*(1.-smoothstep(25.,26.,t))
-    );
-    sdf = mix(sdf, sdb, step(sdf.x, 0.));
+    sda = textbox(x, vec2(.435, -.02), vec2(.6,-.2), .5);
+    sdb = vec4(d-.004, tc);
+    sda = add2(sda, sdb); 
+    sda = add2(sda, vec4(abs(sdb.x)-.002, c.xxy));
+    sdt = add2(sdt, sda);
+    alpha = max(alpha, step(sda.x, 1.5/iResolution.y)*blend(14., 25.));
+    
     d = 10.;
-    sdt = textbox(x, vec2(.365, -.045), vec2(.6,-.4), .5);
     {
 const vec2 lin[48] = vec2[48](vec2(6.50e-01,-3.98e-01),vec2(6.50e-01,-4.12e-01),vec2(6.77e-01,-3.98e-01),vec2(6.77e-01,-4.12e-01),vec2(7.03e-01,-3.98e-01),vec2(7.03e-01,-4.12e-01),vec2(7.17e-01,-3.98e-01),vec2(7.17e-01,-4.12e-01),vec2(7.44e-01,-3.98e-01),vec2(7.44e-01,-4.12e-01),vec2(7.71e-01,-3.98e-01),vec2(7.71e-01,-4.12e-01),vec2(7.85e-01,-3.98e-01),vec2(7.85e-01,-4.12e-01),vec2(8.11e-01,-3.98e-01),vec2(8.11e-01,-4.12e-01),vec2(8.38e-01,-3.98e-01),vec2(8.38e-01,-4.12e-01),vec2(8.52e-01,-4.25e-01),vec2(8.52e-01,-4.25e-01),vec2(8.93e-01,-3.98e-01),vec2(8.66e-01,-3.98e-01),vec2(8.93e-01,-3.98e-01),vec2(8.66e-01,-4.25e-01),vec2(8.66e-01,-4.25e-01),vec2(8.93e-01,-4.25e-01),vec2(9.07e-01,-3.85e-01),vec2(9.20e-01,-3.72e-01),vec2(9.20e-01,-3.72e-01),vec2(9.20e-01,-4.25e-01),vec2(9.34e-01,-4.12e-01),vec2(9.34e-01,-3.85e-01),vec2(9.61e-01,-4.12e-01),vec2(9.61e-01,-3.85e-01),vec2(9.75e-01,-4.25e-01),vec2(9.75e-01,-4.25e-01),vec2(9.89e-01,-4.12e-01),vec2(9.89e-01,-3.98e-01),vec2(9.89e-01,-3.85e-01),vec2(9.89e-01,-3.85e-01),vec2(1.02e+00,-4.25e-01),vec2(1.02e+00,-3.98e-01),vec2(1.04e+00,-4.12e-01),vec2(1.04e+00,-4.25e-01),vec2(1.07e+00,-4.12e-01),vec2(1.07e+00,-3.85e-01),vec2(1.06e+00,-3.98e-01),vec2(1.08e+00,-3.98e-01)),
 quad[75] = vec2[75](vec2(6.50e-01,-4.12e-01),vec2(6.50e-01,-4.25e-01),vec2(6.63e-01,-4.25e-01),vec2(6.63e-01,-4.25e-01),vec2(6.77e-01,-4.25e-01),vec2(6.77e-01,-4.12e-01),vec2(6.77e-01,-4.12e-01),vec2(6.77e-01,-4.25e-01),vec2(6.90e-01,-4.25e-01),vec2(6.90e-01,-4.25e-01),vec2(7.03e-01,-4.25e-01),vec2(7.03e-01,-4.12e-01),vec2(7.17e-01,-4.12e-01),vec2(7.17e-01,-4.25e-01),vec2(7.31e-01,-4.25e-01),vec2(7.31e-01,-4.25e-01),vec2(7.44e-01,-4.25e-01),vec2(7.44e-01,-4.12e-01),vec2(7.44e-01,-4.12e-01),vec2(7.44e-01,-4.25e-01),vec2(7.57e-01,-4.25e-01),vec2(7.57e-01,-4.25e-01),vec2(7.71e-01,-4.25e-01),vec2(7.71e-01,-4.12e-01),vec2(7.85e-01,-4.12e-01),vec2(7.85e-01,-4.25e-01),vec2(7.98e-01,-4.25e-01),vec2(7.98e-01,-4.25e-01),vec2(8.11e-01,-4.25e-01),vec2(8.11e-01,-4.12e-01),vec2(8.11e-01,-4.12e-01),vec2(8.11e-01,-4.25e-01),vec2(8.25e-01,-4.25e-01),vec2(8.25e-01,-4.25e-01),vec2(8.38e-01,-4.25e-01),vec2(8.38e-01,-4.12e-01),vec2(9.34e-01,-4.12e-01),vec2(9.34e-01,-4.25e-01),vec2(9.47e-01,-4.25e-01),vec2(9.47e-01,-4.25e-01),vec2(9.61e-01,-4.25e-01),vec2(9.61e-01,-4.12e-01),vec2(9.61e-01,-3.85e-01),vec2(9.61e-01,-3.72e-01),vec2(9.47e-01,-3.72e-01),vec2(9.47e-01,-3.72e-01),vec2(9.34e-01,-3.72e-01),vec2(9.34e-01,-3.85e-01),vec2(9.89e-01,-4.12e-01),vec2(9.89e-01,-4.25e-01),vec2(1.00e+00,-4.25e-01),vec2(1.03e+00,-3.98e-01),vec2(1.04e+00,-3.98e-01),vec2(1.04e+00,-4.12e-01),vec2(1.02e+00,-4.12e-01),vec2(1.02e+00,-3.98e-01),vec2(1.03e+00,-3.98e-01),vec2(1.06e+00,-4.25e-01),vec2(1.07e+00,-4.25e-01),vec2(1.07e+00,-4.12e-01),vec2(1.07e+00,-3.85e-01),vec2(1.07e+00,-3.72e-01),vec2(1.08e+00,-3.72e-01),vec2(1.11e+00,-4.25e-01),vec2(1.10e+00,-4.25e-01),vec2(1.10e+00,-4.12e-01),vec2(1.10e+00,-4.12e-01),vec2(1.10e+00,-3.98e-01),vec2(1.11e+00,-3.98e-01),vec2(1.11e+00,-3.98e-01),vec2(1.12e+00,-3.98e-01),vec2(1.12e+00,-4.12e-01),vec2(1.12e+00,-4.12e-01),vec2(1.12e+00,-4.25e-01),vec2(1.11e+00,-4.25e-01));
 for(int i=0; i<24;++i) d=min(d,dsg(lin[2*i], lin[2*i+1], uv));
 for(int i=0; i<25; ++i) d=min(d,dsp(quad[3*i], quad[3*i+1], quad[3*i+2], uv));
     }
-    sda = vec2(.004-d, 2.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sda = vec2(-abs(sda.x)+.002, 4.);
-    sdt = mix(sda, sdt, step( sda.x,0.));
-    sdb = vec3(//www.z10.info
-        sdt,
-        smoothstep(17.,18., t)*(1.-smoothstep(25.,26.,t))
-    );
-    sdf = mix(sdf, sdb, step(sdf.x, 0.));
+    sda = textbox(x, vec2(.365, -.045), vec2(.6,-.4), .5);
+    sdb = vec4(d-.004, tc);
+    sda = add2(sda, sdb); 
+    sda = add2(sda, vec4(abs(sdb.x)-.002, c.xxy));
+    sdt = add2(sdt, sda);
+    alpha = max(alpha, step(sda.x, .01)*blend(15., 25.));
 
-    return sdf;
+    return vec4(sdt.gba, alpha)*smoothstep(1.5/iResolution.y, -1.5/iResolution.y, sdt.x);
 }
 
 vec3 raymarch(vec2 uv, float time)
@@ -405,23 +413,9 @@ vec3 raymarch(vec2 uv, float time)
     }
 
     //TODO: add text here
-    vec3 text = textlayer(uv);
-    if(text.y == 1.)
-    {
-        col = mix(col, mix(col, abs(rot(5.e-2*vec3(21.,35.,10.)*text.y+t)*c.yxx), text.z), step(0., text.x)*.6);
-    }
-    else if(text.y == 2.)
-    {
-        col = mix(col, mix(col, abs(rot(5.e-2*vec3(35.,10.,21.)*text.y+t)*c.yxx), text.z), step(0., text.x)*.6);
-    }
-    else if(text.y == 3.)
-    {
-        col = mix(col, mix(col, abs(rot(5.e-2*vec3(35.,10.,21.)*text.y+t+uv.y)*c.yxx), text.z), step(0., text.x)*.7);
-    }
-    else if(text.y == 4.)
-    {
-        col = mix(col, mix(col, c.yyy, text.z), step(0., text.x)*.7);
-    }
+    vec4 text = textlayer(uv);
+    col = mix(col, text.rgb, 1.*text.a);
+    
     return col;
 }
 
