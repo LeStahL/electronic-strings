@@ -425,8 +425,23 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec2 uv = fragCoord/iResolution.yy-.5;
     const float dt = 1.e-2;
 
-    //TODO: add txaa here.
-    vec3 col = (raymarch(uv, iTime));
+    vec3 col = c.yyy;
+    // 4x FSAA
+    if(true)
+    {
+        float dx = .75/iResolution.y;
+        for(float i = -dx; i < dx; i += dx)
+            for(float j = -dx; j < dx; j += dx)
+                 col += raymarch(uv+vec2(i,j), iTime);
+        col *= .25;
+    }
+    // 2x TAA
+    else if(false)
+    {
+        float dt = 1.e-2;
+        col = .5*raymarch(uv, iTime)+.5*raymarch(uv, iTime+dt);
+    }
+    else col = raymarch(uv, iTime);
     fragColor = vec4(col,1.0);
 }
 
