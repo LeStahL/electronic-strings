@@ -96,6 +96,12 @@ float line(vec2 x, vec2 p1, vec2 p2, float w)
     return length(x-mix(p1,p2,clamp(dot(x-p1,d)/dot(d,d),0.,1.)))-w;
 }
 
+float line(vec3 x, vec3 p1, vec3 p2, float w)
+{
+    vec3 d = p2-p1;
+    return length(x-mix(p1,p2,clamp(dot(x-p1,d)/dot(d,d),0.,1.)))-w;
+}
+
 float pict210(vec3 x, float h, float r, float w)
 {
     float ret = min(
@@ -189,10 +195,20 @@ vec2 tunnel(vec3 x)
         sda = vec2(x.z+.8*R, 3.);
     sdf = mix(sda,sdf,step(sdf.x,sda.x));
 
-    //add profile to the floor
+    //add profile to the floor; TODO: better shit.
     float dr = .04;
     vec3 y = vec3(mod(x.xy, dr)-.5*dr, x.z);
     sda = vec2(zextrude(y.z+.4, .4*dr-length(y.xy), .005), 3.);
+    sdf = mix(sda, sdf, step(sdf.x, sda.x));
+
+    //add pipes to the wall
+    float pipe_radius = .02,
+        phi = 0.,
+        rout = R-4.*pipe_radius;
+    vec3 ka = vec3(cos(phi), 0., sin(phi));
+    sda = vec2(line(x, R*ka, rout*ka, pipe_radius), 3.);
+    sdf = mix(sda, sdf, step(sdf.x, sda.x));
+    sda = vec2(line(x, rout*ka, rout*ka+.5*c.yxy, pipe_radius), 3.);
     sdf = mix(sda, sdf, step(sdf.x, sda.x));
 
     //vec3 px = vec3(R, acos(max(x.x,x.z)/R), x.y);
@@ -387,7 +403,7 @@ vec3 raymarch(vec2 uv, float time)
                     spc = abs(rot(5.e-2*vec3(35.,10.,21.)*s.y+t+x.z)*c.xyx);
                 col = .1*amb + dot(l,n)*.3*dif + pow(abs(dot(re,v)),2.)*.9*spc;
 
-                col = mix(col, .0*c.xxx, tanh(2.8*x.y));
+                col = mix(col, .01*c.xxx, tanh(2.8*x.y));
             }
             else if(s.y <= 2.)
             {
@@ -397,7 +413,7 @@ vec3 raymarch(vec2 uv, float time)
                     spc = .2*c.xxx*length(abs(rot(5.e-2*vec3(35.,10.,21.)*s.y+t+x.z)*c.xyx));
                 col = .1*amb + dot(l,n)*.3*dif + pow(abs(dot(re,v)),2.)*.9*spc;
 
-                col = mix(col, .0*c.xxx, tanh(2.8*x.y));
+                col = mix(col, .01*c.xxx, tanh(2.8*x.y));
             }
             else if(s.y <= 3.)
             {
@@ -407,7 +423,7 @@ vec3 raymarch(vec2 uv, float time)
                     spc = abs(rot(5.e-2*vec3(35.,10.,21.)*s.y+t+x.z)*c.xyx);
                 col = .1*amb + dot(l,n)*.2*dif + pow(abs(dot(re,v)),2.)*.9*spc;
 
-                col = mix(col, .0*c.xxx, tanh(.8*x.y));
+                col = mix(col, .01*c.xxx, tanh(.8*x.y));
             }
         }
     }
