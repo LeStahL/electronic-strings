@@ -39,7 +39,7 @@ float fdata(float byte)
         rgba_n = byte - byte_n,
         x = mod(rgba_n, iFontWidth), 
         y = (rgba_n-x)/iFontWidth;
-    
+    return byte_n;
 }
 
 float dletter(vec2 x, int which, float size)
@@ -493,6 +493,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
         col = .5*raymarch(uv, iTime)+.5*raymarch(uv, iTime+dt);
     }
     else col = raymarch(uv, iTime);
+    
+    col += texture(iFont, uv+.5).rgb;
+    
     fragColor = vec4(col,1.0);
 }
 
