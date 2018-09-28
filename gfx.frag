@@ -1,8 +1,25 @@
+/* Electronic Strings by NR4^QM/Team210 - 64k Intro at Deadline 2018
+ * Copyright (C) 2018 Alexander Kraus <nr4@z10.info>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ */
 
 #version 130
-
 uniform float iTime;
 uniform vec2 iResolution;
+uniform sampler2D iFont;
+uniform float iFontWidth;
 
 float iScale = 0.; //TODO: uniform this
 
@@ -15,6 +32,24 @@ const float t_tunnel = 7000.;
 
 float t = 0.;
 
+// Extract specific byte from font texture 
+float fdata(float byte)
+{
+    float byte_n = mod(byte, 4.), 
+        rgba_n = byte - byte_n,
+        x = mod(rgba_n, iFontWidth), 
+        y = (rgba_n-x)/iFontWidth;
+    
+}
+
+float dletter(vec2 x, int which, float size)
+{
+    // first byte is number of contained glyphs
+    
+    
+//     +texture2D(iFont, x)
+    return 0.;
+}
 float rand(vec2 a0)
 {
     return fract(sin(dot(a0.xy, vec2(12.9898,78.233)))*43758.5453);
@@ -443,7 +478,7 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 
     vec3 col = c.yyy;
     // 4x FSAA
-    if(true)
+    if(false)
     {
         float dx = .75/iResolution.y;
         for(float i = -dx; i < dx; i += dx)
@@ -460,6 +495,9 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     else col = raymarch(uv, iTime);
     fragColor = vec4(col,1.0);
 }
+
+
+
 
 void main()
 {

@@ -28,6 +28,9 @@ int _fltused = 0;
 //TODO: remove
 #include <stdio.h>
 
+// Fonts
+#include "Pacifico-Regular.h"
+
 // Standard library and CRT rewrite for saving executable size
 void *memset(void *ptr, int value, size_t num)
 {
@@ -66,12 +69,31 @@ PFNGLGENFRAMEBUFFERSPROC glGenFramebuffers;
 PFNGLBINDFRAMEBUFFERPROC glBindFramebuffer;
 PFNGLFRAMEBUFFERTEXTURE2DPROC glFramebufferTexture2D;
 PFNGLNAMEDRENDERBUFFERSTORAGEEXTPROC glNamedRenderbufferStorageEXT;
+PFNGLACTIVETEXTUREPROC glActiveTexture;
+PFNGLUNIFORM1IPROC glUniform1i;
+
+//TODO: remove
+void debug(int shader_handle)
+{
+    int compile_status = 0;
+    glGetShaderiv(shader_handle, GL_COMPILE_STATUS, &compile_status);
+    if(compile_status != GL_TRUE)
+    {
+        printf("FAILED.\n");
+        int len = 12;
+        glGetShaderiv(shader_handle, GL_INFO_LOG_LENGTH, &len);
+        printf("log length: %d\n", len);
+        GLchar CompileLog[1024];
+        glGetShaderInfoLog(shader_handle, len, NULL, CompileLog);
+        printf("error: %s\n", CompileLog);
+    }
+}
 
 // Shader globals
 int w = 1920, h = 1080; // TODO: add a way of configuring this in the future.
-int lb_program, lb_progress_location, lb_resolution_location, lb_time_location;
-int gfx_program, gfx_time_location, gfx_resolution_location;
+int gfx_program, gfx_time_location, gfx_resolution_location, gfx_font_texture_location, gfx_font_width_location;
 int sfx_program, sfx_blockoffset_location, sfx_samplerate_location, sfx_volumelocation;
+unsigned int font_texture_handle;
 
 // Demo globals
 float t_start = 0.;
@@ -103,6 +125,10 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
                 return;
             }
             
+            
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, font_texture_handle);
+            
             glUniform1f(gfx_time_location, t_now-t_start);
             glUniform2f(gfx_resolution_location, w, h);
 
@@ -130,6 +156,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 
 int WINAPI demo(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow)
 {
+    // TODO: remove 
+    AllocConsole();
+    freopen("CONIN$", "r", stdin);
+    freopen("CONOUT$", "w", stdout);
+    freopen("CONOUT$", "w", stderr);
+    
     CHAR WindowClass[]  = "Team210 Demo Window";
     
     WNDCLASSEX wc = { 0 };
@@ -221,6 +253,8 @@ int WINAPI demo(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, in
     glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC) wglGetProcAddress("glBindFramebuffer");
     glFramebufferTexture2D = (PFNGLFRAMEBUFFERTEXTURE2DPROC) wglGetProcAddress("glFramebufferTexture2D");
     glNamedRenderbufferStorageEXT = (PFNGLNAMEDRENDERBUFFERSTORAGEEXTPROC) wglGetProcAddress("glNamedRenderbufferStorage");
+    glActiveTexture = (PFNGLACTIVETEXTUREPROC) wglGetProcAddress("glActiveTexture");
+    glUniform1i = (PFNGLUNIFORM1IPROC) wglGetProcAddress("glUniform1i");
     
     // Init gfx
 #undef VAR_IRESOLUTION
@@ -230,16 +264,25 @@ int WINAPI demo(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, in
 #define VAR_IRESOLUTION "iResolution"
 #ifndef VAR_ITIME
 #define VAR_ITIME "iTime"
+#ifndef VAR_IFONT
+#define VAR_IFONT "iFont"
+#ifndef VAR_IFONTWIDTH
+#define VAR_IFONTWIDTH "iFontWidth"
     int gfx_size = strlen(gfx_frag),
         gfx_handle = glCreateShader(GL_FRAGMENT_SHADER);
     gfx_program = glCreateProgram();
     glShaderSource(gfx_handle, 1, (GLchar **)&gfx_frag, &gfx_size);
     glCompileShader(gfx_handle);
+    debug(gfx_handle);
     glAttachShader(gfx_program, gfx_handle);
     glLinkProgram(gfx_program);
     glUseProgram(gfx_program);
     gfx_time_location =  glGetUniformLocation(gfx_program, VAR_ITIME);
     gfx_resolution_location = glGetUniformLocation(gfx_program, VAR_IRESOLUTION);
+    gfx_font_texture_location = glGetUniformLocation(gfx_program, VAR_IFONT);
+    gfx_font_width_location = glGetUniformLocation(gfx_program, VAR_IFONTWIDTH);
+#endif
+#endif
 #endif
 #endif
     
@@ -317,6 +360,18 @@ int WINAPI demo(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, in
     glViewport(0, 0, w, h);
     glUseProgram(gfx_program);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);   
+    
+    // Init font texture
+    glGenTextures(1, &font_texture_handle);
+    glBindTexture(GL_TEXTURE_2D, font_texture_handle);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, font_texture_size, font_texture_size, 0, GL_RGBA, GL_BYTE, font_texture);
+    
+    glUniform1i(gfx_font_texture_location, 0);
+    glUniform1f(gfx_font_width_location, font_texture_size);
     
     // Set render timer
     UINT_PTR t = SetTimer(hwnd, 1, 1000./60., NULL);

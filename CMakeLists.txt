@@ -25,10 +25,7 @@ if(WIN32)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /ENTRY:demo /SUBSYSTEM:Windows  /OPT:REF  /OPT:ICF=10 /VERBOSE /NODEFAULTLIB") 
     
     add_executable(est est.c)
-    target_link_libraries(est opengl32.lib Winmm.lib)
-    
-#     add_executable(debug debug.c)
-#     target_link_libraries(debug opengl32.lib Winmm.lib User32.lib ucrt.lib msvcrt.lib)
+    target_link_libraries(est opengl32.lib Winmm.lib User32.lib ucrt.lib msvcrt.lib) # TODO: remove User32.lib ucrt.lib msvcrt.lib    
 elseif(UNIX)
     add_definitions(-Os)
     add_executable(est est-linux.c)
