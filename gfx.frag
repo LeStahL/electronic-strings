@@ -33,22 +33,59 @@ const float t_tunnel = 7000.;
 float t = 0.;
 
 // Extract specific byte from font texture 
-float fdata(float byte)
+float fchar(float byte_in_texture)
 {
-    float byte_n = mod(byte, 4.), 
-        rgba_n = byte - byte_n,
-        x = mod(rgba_n, iFontWidth), 
-        y = (rgba_n-x)/iFontWidth;
-    return byte_n;
+    float byte_in_pixel = mod(byte_in_texture, 4.),
+        pixel_in_texture = byte_in_texture-byte_in_pixel;
+    vec2 x = vec2(mod(pixel_in_texture, iFontWidth), floor(pixel_in_texture/iFontWidth));
+    
+    vec4 pixel = texture(iFont, x);
+    return pixel[int(byte_in_pixel)] * 256.;
+}
+
+// Extract short from font texture
+float fshort(float byte_in_texture)
+{
+    return fchar(byte_in_texture) + 256.*fchar(byte_in_texture + 1.);
+}
+
+// Extract 16 bit float from font texture
+float ffloat(float byte_in_texture)
+{
+    float ret = fshort(byte_in_texture);
+    return ret / (256.*256.);
 }
 
 float dletter(vec2 x, int which, float size)
 {
+    float d = 1.;
+    
     // first byte is number of contained glyphs
+    float nglyphs = fchar(0.);
+    
+    // find glyph in glyph index
+    for(int i=0; i<int(nglyphs); ++i)
+    {
+        float fi = float(i),
+            char = fchar(1.+3.*fi),
+            off = fshort(2.+3.*fi);
+            
+        if(which == int(char))
+        {
+            // Found the char! Compute distance now.
+            float npoints = fshort(off);
+//             for(int i=0; i<int(npoints); ++i)
+//             {
+                
+//             }
+            return char;
+            
+        }
+    }
     
     
 //     +texture2D(iFont, x)
-    return 0.;
+    return nglyphs;//texture(iFont, x).r;
 }
 float rand(vec2 a0)
 {
@@ -494,9 +531,10 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     }
     else col = raymarch(uv, iTime);
     
-    col += texture(iFont, uv+.5).rgb;
-    
-    fragColor = vec4(col,1.0);
+//     col += texture(iFont, uv+.5).rgb;
+    fragColor = vec4(col, 1.);
+    if(dletter(uv, 100, .5) == 95.)
+        fragColor = vec4(c.yyx,1.0);
 }
 
 
