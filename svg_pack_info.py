@@ -1,6 +1,8 @@
 pack svg into texture
 layout: 
-- 2 Byte, short: Number of contained elements N
+- 2 Byte, short: Number of contained nodes N
+- N Blocks: Node index
+    - 2 Byte, short: Block offset
 - N Blocks consisting of element data, consisting of
 	- 1 Byte, char: Element ID.
 		-0: Line
@@ -22,4 +24,4 @@ layout:
 		-2: Rectangle
 			-4 Bytes, float16[2], {x1,y1}
 			-4 Bytes, float16[2], {width, height}
-
+			
